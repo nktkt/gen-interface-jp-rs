@@ -1,6 +1,6 @@
 use gen_webfont::ranges::{
-    codepoints_from_ranges, format_unicode_range, is_han_codepoint,
-    merge_codepoints_to_ranges, JP_KANA_RANGES, LATIN_RANGES,
+    codepoints_from_ranges, format_unicode_range, is_han_codepoint, merge_codepoints_to_ranges,
+    JP_KANA_RANGES, LATIN_RANGES,
 };
 
 #[test]
@@ -13,7 +13,10 @@ fn merge_codepoints_to_ranges_collapses_runs() {
         merge_codepoints_to_ranges([0x41, 0x43]),
         vec![(0x41, 0x41), (0x43, 0x43)]
     );
-    assert_eq!(merge_codepoints_to_ranges(std::iter::empty::<u32>()), vec![]);
+    assert_eq!(
+        merge_codepoints_to_ranges(std::iter::empty::<u32>()),
+        vec![]
+    );
 }
 
 #[test]
@@ -85,7 +88,10 @@ use gen_webfont::google_japanese::parse_slicing_strategy;
 #[test]
 fn parse_slicing_strategy_handles_brace_in_comment() {
     let mut tmp = std::env::temp_dir();
-    tmp.push(format!("gen_webfont_slicing_test_{}.txt", std::process::id()));
+    tmp.push(format!(
+        "gen_webfont_slicing_test_{}.txt",
+        std::process::id()
+    ));
     let body = "subsets {\n  codepoints: 0x7D # } RIGHT CURLY BRACKET\n}\n";
     std::fs::write(&tmp, body).unwrap();
     let parsed = parse_slicing_strategy(&tmp).unwrap();

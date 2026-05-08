@@ -26,7 +26,7 @@ pub fn family_files(dist_ttf_root: &Path, version: &str) -> Vec<ReleaseFile> {
     for family in FAMILIES {
         for weight in WEIGHTS {
             let filename = format!("{}-{}.ttf", family.folder_prefix, weight.weight_name);
-            let path = dist_ttf_root.join(&family.family_name).join(&filename);
+            let path = dist_ttf_root.join(family.family_name).join(&filename);
             let archive_name = format!(
                 "GenInterfaceJP-{version}/{}/{}",
                 family.family_name, filename
@@ -72,16 +72,16 @@ pub fn write_zip(
             .with_context(|| format!("creating parent directory {}", parent.display()))?;
     }
 
-    let file = fs::File::create(path)
-        .with_context(|| format!("creating zip file {}", path.display()))?;
+    let file =
+        fs::File::create(path).with_context(|| format!("creating zip file {}", path.display()))?;
     let mut zip = ZipWriter::new(file);
     let opts: FileOptions<()> = FileOptions::default()
         .compression_method(CompressionMethod::Deflated)
         .compression_level(Some(9));
 
     for entry in files {
-        let bytes = fs::read(&entry.path)
-            .with_context(|| format!("reading {}", entry.path.display()))?;
+        let bytes =
+            fs::read(&entry.path).with_context(|| format!("reading {}", entry.path.display()))?;
         zip.start_file(&entry.archive_name, opts)
             .with_context(|| format!("starting zip entry {}", entry.archive_name))?;
         zip.write_all(&bytes)
@@ -122,10 +122,8 @@ mod tests {
 
     #[test]
     fn ofl_text_prepends_copyright_lines() {
-        let path = std::env::temp_dir().join(format!(
-            "gen_release_ofl_test_{}.txt",
-            std::process::id()
-        ));
+        let path =
+            std::env::temp_dir().join(format!("gen_release_ofl_test_{}.txt", std::process::id()));
         std::fs::write(&path, b"Copyright stuff\n\nOFL body line").unwrap();
         let out = ofl_text(&path).expect("ofl_text");
         let _ = std::fs::remove_file(&path);

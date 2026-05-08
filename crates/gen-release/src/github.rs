@@ -19,7 +19,10 @@ pub fn asset_filename(version: &str) -> String {
 pub fn github_asset_urls(repository: &str, tag: &str, version: &str) -> BTreeMap<String, String> {
     let base = format!("https://github.com/{repository}/releases/download/{tag}");
     let mut m = BTreeMap::new();
-    m.insert("bundle".into(), format!("{base}/{}", asset_filename(version)));
+    m.insert(
+        "bundle".into(),
+        format!("{base}/{}", asset_filename(version)),
+    );
     m
 }
 

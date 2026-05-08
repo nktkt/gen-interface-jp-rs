@@ -85,9 +85,9 @@ pub fn merge_codepoints_to_ranges<I: IntoIterator<Item = u32>>(cps: I) -> Vec<(u
 
 fn format_codepoint(cp: u32) -> String {
     if cp > 0xFFFF {
-        format!("{:X}", cp)
+        format!("{cp:X}")
     } else {
-        format!("{:04X}", cp)
+        format!("{cp:04X}")
     }
 }
 

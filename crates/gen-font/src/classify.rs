@@ -6,6 +6,15 @@
 //! full-width grid, and only kana *letters* (not the middle dot) want
 //! the full palt shrink.
 
+use std::collections::BTreeSet;
+
+use read_fonts::{
+    tables::gsub::{ExtensionSubtable, SingleSubst, SubstitutionLookup},
+    types::Tag,
+    TableProvider,
+};
+use skrifa::{charmap::Charmap, FontRef, GlyphId, GlyphNames};
+
 /// Parse the codepoint from an Adobe-style `uniXXXX` glyph name.
 ///
 /// Returns `None` if the name doesn't follow `uni<4 hex>`. The check is
@@ -111,6 +120,197 @@ pub fn is_cjk_codepoint(cp: u32) -> bool {
         || (0x4E00..=0x9FFF).contains(&cp)
         || (0xF900..=0xFAFF).contains(&cp)
         || (0x20000..=0x2FA1F).contains(&cp)
+}
+
+/// Return the full ordered list of glyph names for `font`, indexed by glyph
+/// id (`names[gid] = name`). Names that the font's `post`/CFF tables don't
+/// expose fall back to skrifa's synthesised `gidNNN` placeholder.
+///
+/// Mirrors fontTools' `font.getGlyphOrder()` so the bucket-building logic in
+/// [`crate::build::build_one`] can drive set operations by glyph name exactly
+/// like the Python reference does.
+pub fn glyph_names(font: &FontRef<'_>) -> Vec<String> {
+    let glyph_names = GlyphNames::new(font);
+    let Ok(maxp) = font.maxp() else {
+        return Vec::new();
+    };
+    let num_glyphs = u32::from(maxp.num_glyphs());
+    (0..num_glyphs)
+        .map(|gid| {
+            let glyph_id = GlyphId::new(gid);
+            match glyph_names.get(glyph_id) {
+                Some(n) => n.to_string(),
+                None => format!("gid{gid}"),
+            }
+        })
+        .collect()
+}
+
+/// Return glyph names that appear as substitutes in `vert` / `vrt2` GSUB
+/// lookups — the rotated / vertical-form variants OpenType picks up under
+/// vertical writing mode.
+///
+/// We collect them so the proportional pass and the bbox-strip pass can
+/// avoid touching them: vertical-only glyphs don't contribute to the
+/// horizontal rhythm we're tuning, and rewriting their metrics would
+/// mismatch what the unrotated original expects.
+///
+/// Only single-substitution lookups are walked (mirrors the Python
+/// `hasattr(st, "mapping")` filter — vertical lookups in Noto are
+/// exclusively single-subs in practice). Extension lookups wrapping a
+/// `SingleSubst` are unwrapped.
+///
+/// Port of `_get_vert_alternates` from `source/src/font/build.py` (lines
+/// 210-233).
+pub fn get_vert_alternates(font: &FontRef<'_>) -> anyhow::Result<BTreeSet<String>> {
+    let mut out = BTreeSet::new();
+
+    // Missing GSUB / FeatureList / LookupList all surface as "no vertical
+    // alternates". Python returns an empty set in the same shape, and callers
+    // treat absence as "no glyphs to skip in the proportional pass".
+    let Ok(gsub) = font.gsub() else {
+        return Ok(out);
+    };
+    let Ok(feature_list) = gsub.feature_list() else {
+        return Ok(out);
+    };
+    let Ok(lookup_list) = gsub.lookup_list() else {
+        return Ok(out);
+    };
+
+    let vert_tag = Tag::new(b"vert");
+    let vrt2_tag = Tag::new(b"vrt2");
+
+    let feature_data = feature_list.offset_data();
+    let mut lookup_indices: Vec<u16> = Vec::new();
+    for record in feature_list.feature_records() {
+        let tag = record.feature_tag();
+        if tag != vert_tag && tag != vrt2_tag {
+            continue;
+        }
+        let Ok(feature) = record.feature(feature_data) else {
+            continue;
+        };
+        for raw in feature.lookup_list_indices() {
+            lookup_indices.push(raw.get());
+        }
+    }
+    if lookup_indices.is_empty() {
+        return Ok(out);
+    }
+
+    let glyph_names_resolver = GlyphNames::new(font);
+    let lookups = lookup_list.lookups();
+    for index in lookup_indices {
+        let Ok(lookup) = lookups.get(index as usize) else {
+            continue;
+        };
+        match lookup {
+            SubstitutionLookup::Single(single) => {
+                for sub in single.subtables().iter().flatten() {
+                    record_single_subst_targets(&sub, &glyph_names_resolver, &mut out);
+                }
+            }
+            SubstitutionLookup::Extension(ext) => {
+                for sub in ext.subtables().iter().flatten() {
+                    if let ExtensionSubtable::Single(ext_single) = sub {
+                        if let Ok(inner) = ext_single.extension() {
+                            record_single_subst_targets(&inner, &glyph_names_resolver, &mut out);
+                        }
+                    }
+                }
+            }
+            // Multi / ligature / contextual / chained — Python's `hasattr(st,
+            // "mapping")` skips them, mirror that here.
+            _ => {}
+        }
+    }
+    Ok(out)
+}
+
+/// Add every substitute glyph name from a `SingleSubst` subtable to `out`.
+fn record_single_subst_targets(
+    subst: &SingleSubst<'_>,
+    glyph_names_resolver: &GlyphNames<'_>,
+    out: &mut BTreeSet<String>,
+) {
+    match subst {
+        SingleSubst::Format1(fmt1) => {
+            // Format 1: substitute = (key + delta) mod 65536 for every
+            // glyph in coverage.
+            let Ok(coverage) = fmt1.coverage() else {
+                return;
+            };
+            let delta = fmt1.delta_glyph_id() as i32;
+            for gid16 in coverage.iter() {
+                let key = i32::from(gid16.to_u16());
+                let sub_gid = ((key + delta).rem_euclid(0x10000)) as u32;
+                if let Some(name) = glyph_names_resolver.get(GlyphId::new(sub_gid)) {
+                    out.insert(name.to_string());
+                }
+            }
+        }
+        SingleSubst::Format2(fmt2) => {
+            // Format 2: explicit per-glyph substitutes; `substitute_glyph_ids`
+            // is parallel to coverage order.
+            for gid16 in fmt2.substitute_glyph_ids() {
+                let sub_gid = u32::from(gid16.get().to_u16());
+                if let Some(name) = glyph_names_resolver.get(GlyphId::new(sub_gid)) {
+                    out.insert(name.to_string());
+                }
+            }
+        }
+    }
+}
+
+/// Return the set of glyph IDs whose codepoint is in the kana / CJK punctuation
+/// blocks. Uses the font's cmap directly (more robust than glyph-name parsing,
+/// which only works for fonts whose post table exposes Adobe-style `uniXXXX`
+/// names).
+///
+/// Codepoint ranges checked (matching `is_kana_or_punct` by codepoint):
+///   - 0x3000..=0x303F (CJK Symbols and Punctuation)
+///   - 0x3040..=0x309F (Hiragana)
+///   - 0x30A0..=0x30FF (Katakana)
+///   - 0x31F0..=0x31FF (Katakana Phonetic Extensions)
+///   - 0xFF00..=0xFFEF (Halfwidth and Fullwidth Forms)
+pub fn get_kana_or_punct_glyphs(font: &FontRef<'_>) -> BTreeSet<u32> {
+    let mut out = BTreeSet::new();
+    let charmap = Charmap::new(font);
+    for (cp, gid) in charmap.mappings() {
+        if (0x3000..=0x303F).contains(&cp)
+            || (0x3040..=0x309F).contains(&cp)
+            || (0x30A0..=0x30FF).contains(&cp)
+            || (0x31F0..=0x31FF).contains(&cp)
+            || (0xFF00..=0xFFEF).contains(&cp)
+        {
+            out.insert(gid.to_u32());
+        }
+    }
+    out
+}
+
+/// Resolve CJK ideograph glyph names through the font's cmap.
+///
+/// Cmap-driven (rather than glyph-name parsing) so that ideographs whose names
+/// don't follow `uniXXXX` are still caught — Noto ships some Han glyphs as
+/// `cidNNNNN` or post-substitution names that wouldn't match a `uni`-prefix
+/// check.
+///
+/// Port of `_get_cjk_glyphs` from `source/src/font/build.py` (lines 267-278).
+pub fn get_cjk_glyphs(font: &FontRef<'_>) -> anyhow::Result<BTreeSet<String>> {
+    let mut out = BTreeSet::new();
+    let charmap = Charmap::new(font);
+    let glyph_names_resolver = GlyphNames::new(font);
+    for (cp, gid) in charmap.mappings() {
+        if !is_cjk_codepoint(cp) {
+            continue;
+        }
+        if let Some(name) = glyph_names_resolver.get(gid) {
+            out.insert(name.to_string());
+        }
+    }
+    Ok(out)
 }
 
 #[cfg(test)]

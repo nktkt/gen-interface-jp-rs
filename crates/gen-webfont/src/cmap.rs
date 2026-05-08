@@ -36,8 +36,7 @@ pub fn verify_matching_cmaps(source_paths: &[&Path]) -> anyhow::Result<BTreeSet<
                 let display = match &cwd {
                     Some(base) => path
                         .strip_prefix(base)
-                        .map(|p| p.to_path_buf())
-                        .unwrap_or_else(|_| path.to_path_buf()),
+                        .map_or_else(|_| path.to_path_buf(), std::path::Path::to_path_buf),
                     None => path.to_path_buf(),
                 };
                 format!(

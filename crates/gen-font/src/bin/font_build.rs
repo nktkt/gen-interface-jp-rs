@@ -82,10 +82,7 @@ fn resolve_selection(
             .collect();
         if filtered.is_empty() {
             let available: Vec<&str> = WEIGHTS.iter().map(|w| w.weight_name).collect();
-            return Err(anyhow!(
-                "No matching weights. Available: {:?}",
-                available
-            ));
+            return Err(anyhow!("No matching weights. Available: {available:?}"));
         }
         filtered
     };

@@ -11,10 +11,10 @@ pub fn write_nam(out_path: &Path, codepoints: &[u32], note: &str) -> anyhow::Res
     let sorted: BTreeSet<u32> = codepoints.iter().copied().collect();
 
     let mut content = String::new();
-    content.push_str(&format!("# {}\n", note));
+    content.push_str(&format!("# {note}\n"));
     content.push_str("# One codepoint per line, nam-files style.\n");
     for cp in &sorted {
-        content.push_str(&format!("0x{:04X}\n", cp));
+        content.push_str(&format!("0x{cp:04X}\n"));
     }
 
     if let Some(parent) = out_path.parent() {
@@ -35,9 +35,8 @@ mod tests {
         let pid = std::process::id();
         let nanos = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
-            .map(|d| d.as_nanos())
-            .unwrap_or(0);
-        std::env::temp_dir().join(format!("gen_webfont_nam_test_{}_{}_{}", pid, nanos, name))
+            .map_or(0, |d| d.as_nanos());
+        std::env::temp_dir().join(format!("gen_webfont_nam_test_{pid}_{nanos}_{name}"))
     }
 
     #[test]
@@ -102,7 +101,7 @@ mod tests {
 
         let content = fs::read_to_string(&nested).expect("read failed");
         assert!(content.contains("0x0041\n"));
-        assert!(content.ends_with("\n"));
+        assert!(content.ends_with('\n'));
 
         let _ = fs::remove_dir_all(&base);
     }

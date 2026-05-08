@@ -313,6 +313,24 @@ jsDelivr's npm CDN at runtime — i.e. the live site uses the same npm
 artifact a third-party consumer would, exercising the package end-to-end.
 GitHub Pages deploys the build via `.github/workflows/pages.yml`.
 
+## Implementation status
+
+| Module | Function | Status | Notes |
+|---|---|---|---|
+| `gen_font::glyph` | `shift_glyph_x` | ✅ implemented | translates simple/composite glyph contour points |
+| `gen_font::tracking` | `apply_tracking` | ✅ implemented | hmtx-only rewrite via write-fonts |
+| `gen_font::glyph_spacing` | `apply_glyph_spacing` | ✅ implemented | cmap+hmtx mutation |
+| `gen_font::strip_extreme` | `strip_extreme_glyphs` | ✅ implemented | glyf+loca+cmap+GSUB rebuild |
+| `gen_font::x_scale` | `apply_x_scale` | ✅ implemented | glyf+hmtx+GPOS X scale |
+| `gen_font::palt` | `read_palt` | ✅ implemented | GPOS palt walk via skrifa |
+| `gen_font::palt` | `remove_prop_features` | ✅ implemented | GPOS rebuild dropping palt/vpal/halt/vhal |
+| `gen_font::proportional` | `make_proportional` | ✅ implemented | three-bucket palt baking |
+| `gen_font::classify` | `glyph_names`, `get_vert_alternates`, `get_cjk_glyphs`, `get_kana_or_punct_glyphs` | ✅ implemented | font-bound glyph set helpers |
+| `gen_font::baker` | `bake` | ⚠️ partial / TODO | variable-font axis instancing |
+| `gen_font::baker` | `merge_fonts` | ⚠️ partial / TODO | sub + base font merge |
+| `gen_font::build` | `build_one` | ⚠️ Stage 2 wired, Stage 1+3 blocked | end-to-end is gated on baker |
+| `gen_webfont::subset` | `build_woff2_subset` | ❌ TODO | TTF → subset WOFF2 |
+
 ## Tests
 
 ```bash

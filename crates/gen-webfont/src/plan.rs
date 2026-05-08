@@ -24,7 +24,7 @@ fn chunk_evenly<T: Clone>(values: &[T], chunks: usize) -> Vec<Vec<T>> {
     let len = values.len();
     let denom = chunks.max(1);
     // ceil(len / denom)
-    let chunk_size = ((len + denom - 1) / denom).max(1);
+    let chunk_size = len.div_ceil(denom).max(1);
     let mut out: Vec<Vec<T>> = Vec::new();
     let mut i = 0;
     while i < len {
@@ -105,8 +105,8 @@ pub fn build_subset_plan<I: IntoIterator<Item = u32>>(
     );
 
     for row in 16u8..48 {
-        let name = format!("jp-kanji-jis1-{:02}", row);
-        let note = format!("JIS X 0208 first-level kanji row {}", row);
+        let name = format!("jp-kanji-jis1-{row:02}");
+        let note = format!("JIS X 0208 first-level kanji row {row}");
         add(
             &supported,
             &mut assigned,
@@ -118,8 +118,8 @@ pub fn build_subset_plan<I: IntoIterator<Item = u32>>(
     }
 
     for row in 48u8..85 {
-        let name = format!("jp-kanji-jis2-{:02}", row);
-        let note = format!("JIS X 0208 second-level kanji row {}", row);
+        let name = format!("jp-kanji-jis2-{row:02}");
+        let note = format!("JIS X 0208 second-level kanji row {row}");
         add(
             &supported,
             &mut assigned,
@@ -139,7 +139,7 @@ pub fn build_subset_plan<I: IntoIterator<Item = u32>>(
         .into_iter()
         .enumerate()
     {
-        let name = format!("jp-kanji-extra-{:02}", index);
+        let name = format!("jp-kanji-extra-{index:02}");
         let chunk_set: BTreeSet<u32> = chunk.into_iter().collect();
         add(
             &supported,
@@ -157,7 +157,7 @@ pub fn build_subset_plan<I: IntoIterator<Item = u32>>(
         .filter(|cp| !assigned.contains(cp))
         .collect();
     for (index, chunk) in chunk_evenly(&remaining, 8).into_iter().enumerate() {
-        let name = format!("other-{:02}", index);
+        let name = format!("other-{index:02}");
         let chunk_set: BTreeSet<u32> = chunk.into_iter().collect();
         add(
             &supported,
@@ -181,7 +181,7 @@ mod tests {
     fn chunk_evenly_two_chunks() {
         let chunks = chunk_evenly(&[1, 2, 3, 4, 5], 2);
         assert_eq!(chunks.len(), 2);
-        let total: usize = chunks.iter().map(|c| c.len()).sum();
+        let total: usize = chunks.iter().map(std::vec::Vec::len).sum();
         assert_eq!(total, 5);
     }
 
@@ -195,7 +195,7 @@ mod tests {
     fn chunk_evenly_zero_chunks_treated_as_one() {
         // Python's max(1, ceil(...)) means 0 chunks behaves like 1 (avoids div-by-zero).
         let chunks = chunk_evenly(&[1, 2, 3], 0);
-        let total: usize = chunks.iter().map(|c| c.len()).sum();
+        let total: usize = chunks.iter().map(std::vec::Vec::len).sum();
         assert_eq!(total, 3);
     }
 
@@ -208,7 +208,10 @@ mod tests {
         let mut seen: HashSet<u32> = HashSet::new();
         for subset in &plan {
             for cp in &subset.codepoints {
-                assert!(seen.insert(*cp), "duplicate codepoint across subsets: {cp:#x}");
+                assert!(
+                    seen.insert(*cp),
+                    "duplicate codepoint across subsets: {cp:#x}"
+                );
                 all.push(*cp);
             }
         }

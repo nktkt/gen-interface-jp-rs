@@ -42,10 +42,7 @@ mod tests {
     fn row_16_contains_a_kanji() {
         // 亜 (U+4E9C) is at JIS X 0208 row 16, cell 1.
         let cps = jis_row_codepoints(16);
-        assert!(
-            cps.contains(&0x4E9C),
-            "row 16 should contain 亜 (U+4E9C)"
-        );
+        assert!(cps.contains(&0x4E9C), "row 16 should contain 亜 (U+4E9C)");
     }
 
     #[test]

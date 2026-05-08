@@ -22,12 +22,14 @@ pub fn project_version(workspace_root: &Path) -> anyhow::Result<String> {
         .with_context(|| format!("failed to read {}", cargo_toml.display()))?;
 
     // Mirrors the Python: `re.search(r'^version\s*=\s*"([^"]+)"', text, re.M)`.
-    let re = Regex::new(r#"(?m)^version\s*=\s*"([^"]+)""#)
-        .expect("static regex compiles");
+    let re = Regex::new(r#"(?m)^version\s*=\s*"([^"]+)""#).expect("static regex compiles");
 
-    let captures = re
-        .captures(&contents)
-        .ok_or_else(|| anyhow!("could not read project version from {}", cargo_toml.display()))?;
+    let captures = re.captures(&contents).ok_or_else(|| {
+        anyhow!(
+            "could not read project version from {}",
+            cargo_toml.display()
+        )
+    })?;
 
     Ok(captures
         .get(1)
@@ -43,10 +45,7 @@ pub fn project_version(workspace_root: &Path) -> anyhow::Result<String> {
 ///
 /// The leading `"v"` is stripped if present, so the returned string is
 /// always in plain numeric form (e.g. `"0.1.4"`).
-pub fn normalized_version(
-    version: Option<&str>,
-    workspace_root: &Path,
-) -> anyhow::Result<String> {
+pub fn normalized_version(version: Option<&str>, workspace_root: &Path) -> anyhow::Result<String> {
     let raw = match version {
         Some(v) => v.to_owned(),
         None => match std::env::var("GITHUB_REF_NAME") {

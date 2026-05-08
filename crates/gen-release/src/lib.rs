@@ -1,4 +1,4 @@
-//! Release artifact generation for GenInterfaceJP.
+//! Release artifact generation for `GenInterfaceJP`.
 //!
 //! - Outputs `dist/release/github/GenInterfaceJP-<version>.zip` (TTF, both families × all weights)
 //! - Outputs `dist/release/npm/` (subset webfont package for npm publishing)

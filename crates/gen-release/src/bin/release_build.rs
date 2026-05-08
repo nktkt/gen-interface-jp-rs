@@ -4,7 +4,7 @@ use std::path::PathBuf;
 #[derive(Parser, Debug)]
 #[command(version, about = "Prepare release artifacts for Gen Interface JP.")]
 struct Args {
-    /// Release version. Defaults to GITHUB_REF_NAME or workspace Cargo.toml.
+    /// Release version. Defaults to `GITHUB_REF_NAME` or workspace Cargo.toml.
     #[arg(long)]
     version: Option<String>,
 

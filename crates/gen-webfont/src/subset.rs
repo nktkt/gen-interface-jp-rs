@@ -41,6 +41,7 @@ const DROP_TABLES: &[&[u8; 4]] = &[b"DSIG"];
 /// that matter to us. Kept private; callers go through the two public
 /// helpers below.
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 struct SubsetOptions {
     /// `flavor = "woff2"` — output container.
     flavor_woff2: bool,
@@ -80,11 +81,7 @@ impl SubsetOptions {
 /// `out_path`.
 ///
 /// Mirrors `build_woff2_subset` in `source/src/webfont/build.py`.
-pub fn build_woff2_subset(
-    src_ttf: &Path,
-    out_path: &Path,
-    codepoints: &[u32],
-) -> Result<()> {
+pub fn build_woff2_subset(src_ttf: &Path, _out_path: &Path, codepoints: &[u32]) -> Result<()> {
     let options = SubsetOptions::for_woff2_subset();
 
     // Deduplicate + sort, matching Python's `sorted(set(codepoints))`.
@@ -134,7 +131,7 @@ pub fn build_woff2_subset(
     // up, we can't actually produce a TTF, so we surface the missing
     // implementation as an error rather than silently writing garbage.
     let _ = &options;
-    let new_ttf_bytes: Vec<u8> = {
+    let _new_ttf_bytes: Vec<u8> = {
         // TODO(impl): replace this with the real builder output.
         return Err(anyhow::anyhow!(
             "build_woff2_subset: subsetter not yet implemented \
@@ -148,7 +145,7 @@ pub fn build_woff2_subset(
     // never emit those tables. Listed here for parity with the Python
     // option naming.
     #[allow(unreachable_code)]
-    let _ = &new_ttf_bytes;
+    let _ = &_new_ttf_bytes;
 
     // Step 5: TTF → WOFF2.
     //
@@ -165,14 +162,14 @@ pub fn build_woff2_subset(
 
     // Mirror Python's `out_path.parent.mkdir(parents=True, exist_ok=True)`.
     #[allow(unreachable_code)]
-    if let Some(parent) = out_path.parent() {
+    if let Some(parent) = _out_path.parent() {
         std::fs::create_dir_all(parent)
             .with_context(|| format!("creating parent dir {}", parent.display()))?;
     }
 
     #[allow(unreachable_code)]
-    std::fs::write(out_path, &woff2_bytes)
-        .with_context(|| format!("writing WOFF2 to {}", out_path.display()))?;
+    std::fs::write(_out_path, &woff2_bytes)
+        .with_context(|| format!("writing WOFF2 to {}", _out_path.display()))?;
 
     #[allow(unreachable_code)]
     Ok(())
@@ -182,7 +179,7 @@ pub fn build_woff2_subset(
 ///
 /// Mirrors `build_full_woff2` in `source/src/webfont/build.py`. Used for the
 /// single-Regular benchmark baseline.
-pub fn build_full_woff2(src_ttf: &Path, out_path: &Path) -> Result<()> {
+pub fn build_full_woff2(src_ttf: &Path, _out_path: &Path) -> Result<()> {
     let ttf_bytes = std::fs::read(src_ttf)
         .with_context(|| format!("reading source TTF {}", src_ttf.display()))?;
 
@@ -191,7 +188,7 @@ pub fn build_full_woff2(src_ttf: &Path, out_path: &Path) -> Result<()> {
     // TODO(api): confirm the exact entry point of the `woff2` crate; see the
     // matching note in `build_woff2_subset`. The Python reference does this
     // implicitly by setting `font.flavor = "woff2"` and calling `font.save`.
-    let woff2_bytes: Vec<u8> = {
+    let _woff2_bytes: Vec<u8> = {
         // TODO(api): woff2::convert_ttf_to_woff2(&ttf_bytes)?
         let _ = &ttf_bytes;
         return Err(anyhow::anyhow!(
@@ -200,14 +197,14 @@ pub fn build_full_woff2(src_ttf: &Path, out_path: &Path) -> Result<()> {
     };
 
     #[allow(unreachable_code)]
-    if let Some(parent) = out_path.parent() {
+    if let Some(parent) = _out_path.parent() {
         std::fs::create_dir_all(parent)
             .with_context(|| format!("creating parent dir {}", parent.display()))?;
     }
 
     #[allow(unreachable_code)]
-    std::fs::write(out_path, &woff2_bytes)
-        .with_context(|| format!("writing WOFF2 to {}", out_path.display()))?;
+    std::fs::write(_out_path, &_woff2_bytes)
+        .with_context(|| format!("writing WOFF2 to {}", _out_path.display()))?;
 
     #[allow(unreachable_code)]
     Ok(())

@@ -1,0 +1,28 @@
+version: 2
+updates:
+  - package-ecosystem: cargo
+    directory: "/"
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    groups:
+      font-crates:
+        patterns:
+          - "skrifa"
+          - "read-fonts"
+          - "write-fonts"
+          - "font-types"
+      ecosystem:
+        patterns:
+          - "*"
+        exclude-patterns:
+          - "skrifa"
+          - "read-fonts"
+          - "write-fonts"
+          - "font-types"
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: weekly
+      day: monday

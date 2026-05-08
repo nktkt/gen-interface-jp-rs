@@ -17,23 +17,18 @@
 /// `"normal"`, `display` to `"swap"` in the Python — but they are exposed as
 /// parameters here so the build runner can emit per (family x weight).
 /// When `unicode_range` is `None`, the `unicode-range:` line is omitted.
-pub fn font_face_css(
-    family: &str,
-    weight: u16,
-    src: &str,
-    unicode_range: Option<&str>,
-) -> String {
+pub fn font_face_css(family: &str, weight: u16, src: &str, unicode_range: Option<&str>) -> String {
     let mut out = String::new();
     out.push_str("@font-face {\n");
-    out.push_str(&format!("  font-family: \"{}\";\n", family));
+    out.push_str(&format!("  font-family: \"{family}\";\n"));
     out.push_str("  font-style: normal;\n");
-    out.push_str(&format!("  font-weight: {};\n", weight));
+    out.push_str(&format!("  font-weight: {weight};\n"));
     out.push_str("  font-display: swap;\n");
-    out.push_str(&format!("  src: url(\"{}\") format(\"woff2\");\n", src));
+    out.push_str(&format!("  src: url(\"{src}\") format(\"woff2\");\n"));
     if let Some(ur) = unicode_range {
-        out.push_str(&format!("  unicode-range: {};\n", ur));
+        out.push_str(&format!("  unicode-range: {ur};\n"));
     }
-    out.push_str("}");
+    out.push('}');
     out
 }
 
@@ -41,12 +36,7 @@ pub fn font_face_css(
 ///
 /// Mirrors the Python `font_face_css_minified` exactly: a single space remains
 /// between `url("...")` and `format("woff2")`, matching standard CSS minifiers.
-pub fn font_face_css_minified(
-    family: &str,
-    weight: u16,
-    src: &str,
-    unicode_range: &str,
-) -> String {
+pub fn font_face_css_minified(family: &str, weight: u16, src: &str, unicode_range: &str) -> String {
     format!(
         "@font-face{{font-family:\"{family}\";font-style:normal;font-weight:{weight};font-display:swap;src:url(\"{src}\") format(\"woff2\");unicode-range:{unicode_range};}}"
     )

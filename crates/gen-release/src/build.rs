@@ -15,10 +15,10 @@ use std::path::PathBuf;
 
 use anyhow::Context;
 
-use crate::github::*;
-use crate::npm::*;
-use crate::release_zip::*;
-use crate::version::*;
+use crate::github::{asset_filename, github_asset_urls};
+use crate::npm::{copy_webfont_package, write_npm_license_files, write_npm_package};
+use crate::release_zip::{family_files, ofl_text, write_zip};
+use crate::version::{normalized_version, release_tag};
 
 /// Inputs for [`build_release`]. Mirrors the `argparse.Namespace` the Python
 /// CLI passes around, but with explicit roots so the function does not depend
@@ -65,9 +65,10 @@ pub fn build_release(args: &BuildReleaseArgs) -> anyhow::Result<ReleaseManifest>
     // requires the path to resolve on disk.
     std::fs::create_dir_all(&args.output)
         .with_context(|| format!("creating {}", args.output.display()))?;
-    let release_dir = args.output.canonicalize().with_context(|| {
-        format!("canonicalising release output {}", args.output.display())
-    })?;
+    let release_dir = args
+        .output
+        .canonicalize()
+        .with_context(|| format!("canonicalising release output {}", args.output.display()))?;
     let github_dir = release_dir.join("github");
     let npm_dir = release_dir.join("npm");
     let webfont_out = release_dir.join("webfonts").join("gen-interface-jp");
@@ -81,9 +82,7 @@ pub fn build_release(args: &BuildReleaseArgs) -> anyhow::Result<ReleaseManifest>
     // immediately at hand (matches OFL §2's "include this license"
     // requirement for redistribution).
     let dist_ttf_root = args.source_root.join("dist/ttf");
-    let inter_ofl_path = args
-        .source_root
-        .join("vendor/fonts/Inter-4.1/LICENSE.txt");
+    let inter_ofl_path = args.source_root.join("vendor/fonts/Inter-4.1/LICENSE.txt");
     let ofl_body = ofl_text(&inter_ofl_path)?;
 
     let archive_root = format!("GenInterfaceJP-{version}");
@@ -123,9 +122,8 @@ pub fn build_release(args: &BuildReleaseArgs) -> anyhow::Result<ReleaseManifest>
     };
 
     let manifest_path = release_dir.join("manifest.json");
-    let body = serde_json::to_string_pretty(&manifest)
-        .context("serialising release manifest")?
-        + "\n";
+    let body =
+        serde_json::to_string_pretty(&manifest).context("serialising release manifest")? + "\n";
     std::fs::write(&manifest_path, body)
         .with_context(|| format!("writing {}", manifest_path.display()))?;
     println!("Wrote {}", manifest_path.display());

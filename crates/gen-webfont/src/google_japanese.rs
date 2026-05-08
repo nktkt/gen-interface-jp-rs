@@ -116,11 +116,8 @@ fn chunk_evenly(values: &[u32], chunks: usize) -> Vec<Vec<u32>> {
     // Guard against `chunks == 0` to avoid a division by zero — Python relies
     // on the caller passing a positive value, but we should not panic.
     let chunks = chunks.max(1);
-    let chunk_size = ((values.len() + chunks - 1) / chunks).max(1);
-    values
-        .chunks(chunk_size)
-        .map(|c| c.to_vec())
-        .collect()
+    let chunk_size = values.len().div_ceil(chunks).max(1);
+    values.chunks(chunk_size).map(<[u32]>::to_vec).collect()
 }
 
 /// Build subsets from googlefonts/nam-files' Japanese slicing strategy.
@@ -153,11 +150,8 @@ pub fn build_google_japanese_subset_plan<I: IntoIterator<Item = u32>>(
         if usable.is_empty() {
             continue;
         }
-        let name = format!("google-japanese-{:03}", index);
-        let note = format!(
-            "googlefonts/nam-files slices/japanese_default.txt subset {}",
-            index
-        );
+        let name = format!("google-japanese-{index:03}");
+        let note = format!("googlefonts/nam-files slices/japanese_default.txt subset {index}");
         assigned.extend(usable.iter().copied());
         subsets.push(WebFontSubset {
             name,
@@ -168,14 +162,16 @@ pub fn build_google_japanese_subset_plan<I: IntoIterator<Item = u32>>(
 
     if include_remaining {
         let remaining: Vec<u32> = supported.difference(&assigned).copied().collect();
-        for (index, chunk) in chunk_evenly(&remaining, remaining_slices).into_iter().enumerate() {
+        for (index, chunk) in chunk_evenly(&remaining, remaining_slices)
+            .into_iter()
+            .enumerate()
+        {
             subsets.push(WebFontSubset {
-                name: format!("google-japanese-extra-{:02}", index),
+                name: format!("google-japanese-extra-{index:02}"),
                 codepoints: chunk,
-                note:
-                    "Codepoints supported by Gen Interface JP but not covered by \
+                note: "Codepoints supported by Gen Interface JP but not covered by \
                      googlefonts/nam-files Japanese slicing strategy"
-                        .to_string(),
+                    .to_string(),
             });
         }
     }
@@ -192,7 +188,11 @@ mod tests {
     /// leaked because the file is small and the test process is short-lived.
     fn write_temp(name: &str, body: &str) -> std::path::PathBuf {
         let dir = std::env::temp_dir();
-        let path = dir.join(format!("gen-webfont-test-{}-{}.txt", name, std::process::id()));
+        let path = dir.join(format!(
+            "gen-webfont-test-{}-{}.txt",
+            name,
+            std::process::id()
+        ));
         let mut f = std::fs::File::create(&path).expect("create temp file");
         f.write_all(body.as_bytes()).expect("write temp file");
         path
@@ -330,8 +330,8 @@ subsets {
 ";
         let path = write_temp("build-plan", body);
         let font_cps = [0x41u32, 0x42, 0x43, 0x44, 0x99];
-        let plan = build_google_japanese_subset_plan(font_cps, &path, true, 2)
-            .expect("build plan ok");
+        let plan =
+            build_google_japanese_subset_plan(font_cps, &path, true, 2).expect("build plan ok");
 
         // First two entries from the slice file.
         assert_eq!(plan[0].name, "google-japanese-000");
@@ -340,8 +340,9 @@ subsets {
         assert_eq!(plan[1].codepoints, vec![0x44]);
 
         // Plus an extras chunk for the unassigned 0x99.
-        assert!(plan.iter().any(|s| s.name == "google-japanese-extra-00"
-            && s.codepoints == vec![0x99]));
+        assert!(plan
+            .iter()
+            .any(|s| s.name == "google-japanese-extra-00" && s.codepoints == vec![0x99]));
 
         let _ = std::fs::remove_file(path);
     }

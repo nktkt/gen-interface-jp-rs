@@ -10,9 +10,7 @@ use std::path::PathBuf;
 use anyhow::Result;
 use clap::Parser;
 
-use gen_webfont::build_runner::{
-    self, BuildAllArgs, BuildSingleArgs, SubsetStrategy,
-};
+use gen_webfont::build_runner::{self, BuildAllArgs, BuildSingleArgs, SubsetStrategy};
 
 #[derive(Parser, Debug)]
 #[command(
@@ -38,7 +36,7 @@ struct Args {
     /// Subset partitioning strategy.
     #[arg(long, value_enum, default_value_t = StrategyArg::GoogleJapanese)]
     strategy: StrategyArg,
-    /// googlefonts/nam-files slices/japanese_default.txt
+    /// googlefonts/nam-files `slices/japanese_default.txt`
     #[arg(
         long,
         default_value = "../source/vendor/nam-files/slices/japanese_default.txt"
@@ -75,8 +73,7 @@ impl From<StrategyArg> for SubsetStrategy {
 
 fn num_jobs_default() -> usize {
     std::thread::available_parallelism()
-        .map(|n| n.get().min(4))
-        .unwrap_or(1)
+        .map_or(1, |n| n.get().min(4))
         .max(1)
 }
 

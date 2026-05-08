@@ -16,14 +16,46 @@ pub struct WeightSpec {
 }
 
 pub const WEIGHTS: &[WeightSpec] = &[
-    WeightSpec { weight_num: 100, weight_name: "Thin",       noto_wght_axis: 100 },
-    WeightSpec { weight_num: 200, weight_name: "ExtraLight", noto_wght_axis: 260 },
-    WeightSpec { weight_num: 300, weight_name: "Light",      noto_wght_axis: 355 },
-    WeightSpec { weight_num: 400, weight_name: "Regular",    noto_wght_axis: 465 },
-    WeightSpec { weight_num: 500, weight_name: "Medium",     noto_wght_axis: 575 },
-    WeightSpec { weight_num: 600, weight_name: "SemiBold",   noto_wght_axis: 690 },
-    WeightSpec { weight_num: 700, weight_name: "Bold",       noto_wght_axis: 800 },
-    WeightSpec { weight_num: 800, weight_name: "ExtraBold",  noto_wght_axis: 900 },
+    WeightSpec {
+        weight_num: 100,
+        weight_name: "Thin",
+        noto_wght_axis: 100,
+    },
+    WeightSpec {
+        weight_num: 200,
+        weight_name: "ExtraLight",
+        noto_wght_axis: 260,
+    },
+    WeightSpec {
+        weight_num: 300,
+        weight_name: "Light",
+        noto_wght_axis: 355,
+    },
+    WeightSpec {
+        weight_num: 400,
+        weight_name: "Regular",
+        noto_wght_axis: 465,
+    },
+    WeightSpec {
+        weight_num: 500,
+        weight_name: "Medium",
+        noto_wght_axis: 575,
+    },
+    WeightSpec {
+        weight_num: 600,
+        weight_name: "SemiBold",
+        noto_wght_axis: 690,
+    },
+    WeightSpec {
+        weight_num: 700,
+        weight_name: "Bold",
+        noto_wght_axis: 800,
+    },
+    WeightSpec {
+        weight_num: 800,
+        weight_name: "ExtraBold",
+        noto_wght_axis: 900,
+    },
 ];
 
 impl WeightSpec {

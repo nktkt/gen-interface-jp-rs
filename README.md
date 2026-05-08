@@ -1,5 +1,9 @@
 # gen-interface-jp-rs
 
+[![CI](https://github.com/nktkt/gen-interface-jp-rs/actions/workflows/ci.yml/badge.svg)](https://github.com/nktkt/gen-interface-jp-rs/actions/workflows/ci.yml)
+[![Release](https://github.com/nktkt/gen-interface-jp-rs/actions/workflows/release.yml/badge.svg)](https://github.com/nktkt/gen-interface-jp-rs/actions/workflows/release.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+
 A Rust port of [`yamatoiizuka/gen-interface-jp`](https://github.com/yamatoiizuka/gen-interface-jp) — a font build pipeline that blends Inter with Noto Sans JP into a typeface designed for digital interfaces.
 
 > **Status — work in progress.** The workspace compiles cleanly (`cargo check`, `cargo build --release`) and the test suite passes (`cargo test --workspace`). The classification, range, JIS, CSS, manifest, ZIP, npm-package, and GitHub-asset-URL layers are fully ported. The actual font byte mutation (palt baking, tracking, glyph spacing, bbox strip, x-scale, baker bake / merge) is wired in shape but currently `bail!`s with a `TODO(impl)` message — it needs the `skrifa` 0.36 / `write-fonts` 0.42 surface threaded through. See `docs/ARCHITECTURE.md` for the full pipeline spec.
@@ -90,7 +94,7 @@ See `docs/ARCHITECTURE.md` for the full spec, including the proportional-metrics
 cargo test --workspace
 ```
 
-Currently 113 tests across the workspace cover:
+Currently 122 tests across the workspace cover:
 
 - Glyph-name / kana / CJK classification (`gen_font::classify`)
 - Family / weight tables and lookup helpers
@@ -104,7 +108,16 @@ Currently 113 tests across the workspace cover:
 - `OFL.txt` composition and GitHub asset URL contract
 - `version` priority chain (CLI arg → `GITHUB_REF_NAME` → `Cargo.toml`)
 
-Tests that need real font fixtures are deferred until the font-mutation stages land.
+### Integration tests against real Noto
+
+Several new integration tests exercise the now-implemented font-mutation
+stages against the actual Noto Sans JP fixture from `../source/vendor/`:
+
+- `test_roundtrip` — `write-fonts` read/write roundtrip on Noto.
+- `test_tracking_integration` — `apply_tracking` on real Noto.
+- `test_strip_extreme_integration` — `strip_extreme_glyphs` on real Noto.
+- `test_palt_integration` — `read_palt` on real Noto.
+- `test_classify_glyph_sets` — classify helpers on real Noto.
 
 ## Status: what works, what doesn't
 
@@ -112,16 +125,34 @@ Tests that need real font fixtures are deferred until the font-mutation stages l
 
 - All non-font-bytes logic — classification, range math, JIS mapping, subset planning, googlefonts strategy parsing, CSS generation, manifest building, ZIP / npm / GitHub URL packaging, version resolution.
 - All three CLI binaries (`font_build`, `webfont_build`, `release_build`) with `--help` output matching the Python originals.
+- `gen_font::tracking::apply_tracking` — real `hmtx` mutation via `write-fonts`.
+- `gen_font::glyph_spacing::apply_glyph_spacing` — real `cmap` + `hmtx` mutation.
+- `gen_font::strip_extreme::strip_extreme_glyphs` — real `glyf` + `cmap` + `GSUB` rebuild.
+- `gen_font::glyph::shift_glyph_x` — real `glyf` point translation.
+- `gen_font::x_scale::apply_x_scale` — real `glyf` + `hmtx` + `GPOS` X scaling.
+- `gen_font::palt::read_palt` — real `GPOS` palt walk.
+- `gen_font::palt::remove_prop_features` — real `GPOS` rebuild.
+- `gen_font::proportional::make_proportional` — real palt baking + squeeze SB.
+- `gen_font::classify::{glyph_names, get_vert_alternates, get_cjk_glyphs, get_kana_or_punct_glyphs}` — new helpers on top of `skrifa`.
+- `gen_font::build::build_one` Stage 2 wiring — full pass chain end-to-end.
 
 **Stubbed (signature exists, body is `bail!` with a `TODO(impl)` message):**
 
-- `gen_font::baker::bake` and `gen_font::baker::merge_fonts` — variable-font instancing and font merge against `skrifa`/`write-fonts`.
-- `gen_font::proportional::make_proportional` — per-glyph palt baking into hmtx.
-- `gen_font::tracking::apply_tracking`, `gen_font::glyph_spacing::apply_glyph_spacing`, `gen_font::strip_extreme::strip_extreme_glyphs`, `gen_font::x_scale::apply_x_scale` — hmtx / glyf / GSUB mutation.
-- `gen_font::palt::read_palt`, `gen_font::palt::remove_prop_features` — GPOS walk + table rebuild.
+- `gen_font::baker::bake` — variable-font instancing (a fallback impl likely exists now, but the full path is not finalised).
+- `gen_font::baker::merge_fonts` — sub + base font merge.
 - `gen_webfont::subset::build_woff2_subset` — TTF → subset WOFF2 (the planning is done; the actual subsetter wiring is not).
 
-The orchestration in `gen_font::build::build_one` shows the intended call sequence, so finishing the stubs is mostly mechanical once the `write-fonts` mutation surface is pinned.
+The orchestration in `gen_font::build::build_one` shows the intended call sequence, so finishing the remaining stubs is mostly mechanical once the `write-fonts` mutation surface is pinned.
+
+## Documentation
+
+- `docs/ARCHITECTURE.md` — full pipeline spec (English) and `docs/ARCHITECTURE.ja.md` (日本語)
+- `docs/WRITE_FONTS_NOTES.md` — write-fonts 0.42 API notes (for contributors implementing font byte mutation)
+- `CLAUDE.md` — project conventions
+- `CONTRIBUTING.md` — contributor guide
+- `CHANGELOG.md` — release notes
+
+Generated docs: `cargo doc --workspace --open` to view the rustdoc for all three crates.
 
 ## License
 

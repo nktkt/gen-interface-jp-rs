@@ -21,6 +21,11 @@ use anyhow::{Context, Result};
 ///
 /// Mirrors the `fontTools.subset.Options` knobs that the Python script sets,
 /// so the inline subsetter below has a single place to read its policy from.
+//
+// The fields are documenting intended config knobs for the unimplemented
+// subsetter; until `build_subset` is wired up they are read only via the
+// `let _ = cfg;` anchor below, hence the blanket `dead_code` allow.
+#[allow(dead_code)]
 #[derive(Debug, Clone)]
 struct SubsetConfig<'a> {
     /// Characters whose glyphs (and their dependencies) must survive.
@@ -97,9 +102,10 @@ pub fn build_site_subsets(
 ///
 /// The skrifa/write-fonts surface for steps 2-3 is wide; the exact entry
 /// points are marked `TODO(api):` below.
+#[allow(unused_variables)]
 fn build_subset(src: &Path, dst: &Path, cfg: &SubsetConfig<'_>) -> Result<()> {
-    let bytes = std::fs::read(src)
-        .with_context(|| format!("reading source font {}", src.display()))?;
+    let bytes =
+        std::fs::read(src).with_context(|| format!("reading source font {}", src.display()))?;
 
     // TODO(api): replace this placeholder with the real subsetter.
     //
@@ -123,8 +129,7 @@ fn build_subset(src: &Path, dst: &Path, cfg: &SubsetConfig<'_>) -> Result<()> {
     // the public API is callable end-to-end. The output is *not* a real
     // subset yet -- this is a structural placeholder.
     let _ = cfg; // silence unused-field warnings while the body is a stub.
-    std::fs::write(dst, &bytes)
-        .with_context(|| format!("writing subset {}", dst.display()))?;
+    std::fs::write(dst, &bytes).with_context(|| format!("writing subset {}", dst.display()))?;
 
     let size_kb = std::fs::metadata(dst)
         .with_context(|| format!("stat {}", dst.display()))?

@@ -144,7 +144,7 @@ fn path_to_forward_slashes(path: &Path) -> String {
             std::path::Component::CurDir => {}
             std::path::Component::ParentDir => parts.push("..".to_string()),
             std::path::Component::Prefix(p) => {
-                parts.push(p.as_os_str().to_string_lossy().into_owned())
+                parts.push(p.as_os_str().to_string_lossy().into_owned());
             }
         }
     }
@@ -270,7 +270,10 @@ pub fn build_all(args: &BuildAllArgs) -> anyhow::Result<ManifestAll> {
     }
 
     // 3. Verify all source TTFs share a cmap, and capture that cmap.
-    let path_refs: Vec<&Path> = source_paths.values().map(|p| p.as_path()).collect();
+    let path_refs: Vec<&Path> = source_paths
+        .values()
+        .map(std::path::PathBuf::as_path)
+        .collect();
     let base_cmap = cmap::verify_matching_cmaps(&path_refs)?;
     let base_codepoints: Vec<u32> = base_cmap.into_iter().collect();
 
@@ -420,9 +423,14 @@ pub fn build_all(args: &BuildAllArgs) -> anyhow::Result<ManifestAll> {
         let normal_path = out_dir.join(weight_css_filename("normal", *weight));
         let display_path = out_dir.join(weight_css_filename("display", *weight));
 
-        weights_block.insert(weight.to_string(), write_minified_css(&normal_path, &normal)?);
-        display_weights_block
-            .insert(weight.to_string(), write_minified_css(&display_path, &display)?);
+        weights_block.insert(
+            weight.to_string(),
+            write_minified_css(&normal_path, &normal)?,
+        );
+        display_weights_block.insert(
+            weight.to_string(),
+            write_minified_css(&display_path, &display)?,
+        );
     }
 
     // 10. Build the manifest via the in-tree manifest builder.

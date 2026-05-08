@@ -1,4 +1,4 @@
-//! Integration tests for `gen-font` covering classify, palt, glyph_spacing,
+//! Integration tests for `gen-font` covering classify, palt, `glyph_spacing`,
 //! and weight-table logic. Loosely ported from the Python tests in
 //! `tests/test_font_build.py` and `tests/test_proportional.py` — only the
 //! parts that don't need real font fixtures.
@@ -92,7 +92,10 @@ use gen_font::baker::parse_codepoint_spec;
 
 #[test]
 fn parse_codepoint_spec_singletons_and_ranges() {
-    assert_eq!(parse_codepoint_spec(&["U+25CE".into()]).unwrap(), vec![0x25CE]);
+    assert_eq!(
+        parse_codepoint_spec(&["U+25CE".into()]).unwrap(),
+        vec![0x25CE]
+    );
     let r = parse_codepoint_spec(&["U+2460-U+2462".into()]).unwrap();
     assert_eq!(r, vec![0x2460, 0x2461, 0x2462]);
     let mixed = parse_codepoint_spec(&["U+0041".into(), "U+2460-U+2461".into()]).unwrap();

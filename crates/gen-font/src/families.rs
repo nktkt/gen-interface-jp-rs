@@ -5,7 +5,7 @@
 //!
 //! Families:
 //!   - Gen Interface JP         : Inter        + proportional Noto, tracking +30 (kana +40)
-//!   - Gen Interface JP Display : InterDisplay + proportional Noto, tracking 0
+//!   - Gen Interface JP Display : `InterDisplay` + proportional Noto, tracking 0
 
 /// Configuration for a single output family (`normal` or `display`).
 ///

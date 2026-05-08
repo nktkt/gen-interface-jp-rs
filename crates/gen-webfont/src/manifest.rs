@@ -111,10 +111,7 @@ fn iso_utc_now() -> String {
     let minute = (secs_of_day % 3600) / 60;
     let second = secs_of_day % 60;
 
-    format!(
-        "{:04}-{:02}-{:02}T{:02}:{:02}:{:02}.{:06}+00:00",
-        year, m, d, hour, minute, second, micros
-    )
+    format!("{year:04}-{m:02}-{d:02}T{hour:02}:{minute:02}:{second:02}.{micros:06}+00:00")
 }
 
 // ---------------------------------------------------------------------------
@@ -131,7 +128,10 @@ pub struct ManifestSource {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub ttf: Option<String>,
     pub strategy: String,
-    #[serde(rename = "googleJapaneseSlice", skip_serializing_if = "Option::is_none")]
+    #[serde(
+        rename = "googleJapaneseSlice",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub google_japanese_slice: Option<String>,
 }
 

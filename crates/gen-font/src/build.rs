@@ -14,21 +14,28 @@
 //!    [`crate::baker::merge_fonts`], with `SUB_EXCLUDE_CODEPOINTS` keeping
 //!    CJK-conventional symbols on the Noto outline.
 //!
-//! NOTE: Stage 1 (`bake`), Stage 2 (in-place font mutation), and Stage 3
-//! (`merge_fonts`) all currently bail with TODO(impl) errors — the
-//! `skrifa`/`write-fonts` 0.42 surface for axis pinning, hmtx/glyf
-//! mutation, and font merge has not been wired up. The orchestration
-//! below shows the intended call sequence so wiring is mechanical once
-//! those primitives land.
+//! NOTE: Stage 1 (`bake`) and Stage 3 (`merge_fonts`) currently bail with
+//! TODO(impl) errors — the `skrifa`/`write-fonts` 0.42 surface for axis
+//! pinning and font merge has not been wired up. Stage 2 is wired through
+//! the implemented primitives (`palt::read_palt`,
+//! `proportional::make_proportional`, `tracking::apply_tracking`,
+//! `glyph_spacing::apply_glyph_spacing`, `strip_extreme::strip_extreme_glyphs`,
+//! `x_scale::apply_x_scale`). End-to-end execution stops at Stage 1
+//! regardless, so the Stage 2 wiring is unreachable today but compiles
+//! and is ready to run once Stage 1 lands.
 
 use std::path::{Path, PathBuf};
 
-use anyhow::{anyhow, bail, Result};
+use anyhow::{anyhow, Context, Result};
+use skrifa::FontRef;
+use write_fonts::FontBuilder;
 
 use crate::baker::{
     self, AxisPin, ExportConfig, FontInput, MetadataMode, MetricsSource, OutputConfig,
 };
+use crate::classify;
 use crate::families::{FamilyConfig, BASELINE_OFFSET, SCALE, SUB_EXCLUDE_CODEPOINTS};
+use crate::proportional::ProportionalOptions;
 use crate::weights::WeightSpec;
 
 // ---------------------------------------------------------------------------
@@ -117,9 +124,10 @@ pub fn build_one(
     weight: &WeightSpec,
 ) -> Result<BuildResult> {
     // ---- 0. Resolve paths and verify the Inter master exists ----
-    let inter_path = paths
-        .inter_dir
-        .join(format!("{}-{}.ttf", family.inter_prefix, weight.weight_name));
+    let inter_path = paths.inter_dir.join(format!(
+        "{}-{}.ttf",
+        family.inter_prefix, weight.weight_name
+    ));
     if !inter_path.is_file() {
         return Err(anyhow!("Inter font not found: {}", inter_path.display()));
     }
@@ -173,25 +181,173 @@ pub fn build_one(
     }
     println!("    [2/3] Proportional (palt) + {desc}...");
 
-    // TODO(impl): open inst_path with skrifa, build a write-fonts FontBuilder,
-    // then run:
-    //   crate::proportional::make_proportional(&mut builder, opts)?;
-    //   crate::tracking::apply_tracking(&mut builder, tracking, tracking_kana)?;
-    //   crate::glyph_spacing::apply_glyph_spacing(&mut builder, family.glyph_spacing)?;
-    //   crate::strip_extreme::strip_extreme_glyphs(&mut builder)?;
-    //   if family.x_scale != 1.0 { crate::x_scale::apply_x_scale(&mut builder, family.x_scale)?; }
-    //   std::fs::write(&prop_path, builder.build()?)?;
-    let _ = (&prop_path, SUB_EXCLUDE_CODEPOINTS, BASELINE_OFFSET, SCALE);
+    // Read palt adjustments from the variable Noto rather than the freshly
+    // baked inst — variable→static instantiation can leave palt
+    // ValueRecords with zeroed/shifted XPlacement/XAdvance pairs (see
+    // `_get_variable_palt` in build.py:146-162). The variable font is the
+    // canonical palt source across all weights.
+    let variable_bytes = std::fs::read(&paths.noto_variable)
+        .with_context(|| format!("read variable Noto: {}", paths.noto_variable.display()))?;
+    let variable_font =
+        FontRef::new(&variable_bytes).map_err(|e| anyhow!("parse variable Noto: {e}"))?;
+    let palt_data = crate::palt::read_palt(&variable_font)?;
 
-    bail!(
-        "build_one: Stage 2 (proportionalise) requires write-fonts 0.42 \
-         hmtx/glyf mutation that is not yet wired up — see TODO(impl) in \
-         gen_font::proportional / gen_font::tracking / gen_font::glyph_spacing"
-    );
+    // Stage 2 chains several mutations that all touch overlapping tables
+    // (hmtx, glyf, hhea). Each primitive reads from `font` and writes to
+    // `builder`; between primitives we therefore serialise + re-parse so
+    // the next pass reads our mutations rather than the original inst
+    // bytes. Mirrors the in-place mutation the Python `build_one` performs
+    // on a single TTFont — this loop simulates that with a sequence of
+    // owned `Vec<u8>` snapshots, since `skrifa::FontRef` borrows from a
+    // `&[u8]` and can't be re-seated against a `FontBuilder` in place.
+    let mut current_bytes: Vec<u8> = std::fs::read(&inst_path)
+        .with_context(|| format!("read inst font: {}", inst_path.display()))?;
 
-    // The remaining code is intentionally unreachable but documents the
-    // intended Stage 3 wiring once Stage 2 lands.
-    #[allow(unreachable_code)]
+    // Pass A: proportional (palt → hmtx + glyf + GPOS feature strip).
+    {
+        let font = FontRef::new(&current_bytes)
+            .map_err(|e| anyhow!("parse inst for proportional pass: {e}"))?;
+
+        // Three-bucket policy active only when half_palt_punct is set.
+        // Mirrors build.py:672-688.
+        //
+        // The classify helpers still surface glyph-name strings (a number of
+        // them parse `uniXXXX`-style names by design); resolve through a
+        // single `name → gid` map at the end so the gid-keyed
+        // `ProportionalOptions` doesn't drag the name-based filtering down
+        // into the primitive itself. Names that don't resolve in this font's
+        // `post`/synthetic name table are silently dropped — same policy as
+        // the Python reference's `if glyph_name in hmtx.metrics` filter.
+        let (reduced_palt_set, squeeze_sb_set) = if half_palt_punct {
+            // Build a name → gid resolver for this font. Names that the
+            // `post` table doesn't expose come back as `gidNNN` placeholders
+            // (skrifa fallback); the classify helpers below already return
+            // names in the same vocabulary, so the lookup is a self-join.
+            let glyph_names_resolver = skrifa::GlyphNames::new(&font);
+            let mut name_to_gid: std::collections::BTreeMap<String, u32> =
+                std::collections::BTreeMap::new();
+            for (gid, name) in glyph_names_resolver.iter() {
+                name_to_gid.insert(name.as_str().to_string(), gid.to_u32());
+            }
+
+            // palt_glyphs is keyed by gid (read_palt's new return shape);
+            // cross-check against the classify name vocabulary by reverse-
+            // resolving each gid to a name where possible, building a name
+            // set for the filter passes below.
+            let palt_gids: std::collections::BTreeSet<u32> = palt_data.keys().copied().collect();
+            let palt_glyph_names: std::collections::BTreeSet<String> = palt_gids
+                .iter()
+                .filter_map(|&gid| {
+                    glyph_names_resolver
+                        .get(skrifa::GlyphId::new(gid))
+                        .map(|n| n.to_string())
+                })
+                .collect();
+
+            let vert_glyphs = classify::get_vert_alternates(&font)?;
+            let cjk_glyphs = classify::get_cjk_glyphs(&font)?;
+            let exclude: std::collections::BTreeSet<String> =
+                vert_glyphs.union(&cjk_glyphs).cloned().collect();
+
+            let reduced_palt_names: std::collections::BTreeSet<String> = palt_glyph_names
+                .iter()
+                .filter(|g| !classify::is_kana_letter(g) && !exclude.contains(*g))
+                .cloned()
+                .collect();
+
+            // squeeze_sb: every glyph in the font's glyph order that is not
+            // in palt, not in exclude, and not a kana letter.
+            let glyph_order = classify::glyph_names(&font);
+            let squeeze_sb_names: std::collections::BTreeSet<String> = glyph_order
+                .into_iter()
+                .filter(|g| {
+                    !palt_glyph_names.contains(g)
+                        && !exclude.contains(g)
+                        && !classify::is_kana_letter(g)
+                })
+                .collect();
+
+            // Resolve both name-sets to gid-sets, dropping unresolvable names
+            // (same as Python's `if name in hmtx.metrics`).
+            let reduced_palt: std::collections::BTreeSet<u32> = reduced_palt_names
+                .iter()
+                .filter_map(|n| name_to_gid.get(n).copied())
+                .collect();
+            let squeeze_sb: std::collections::BTreeSet<u32> = squeeze_sb_names
+                .iter()
+                .filter_map(|n| name_to_gid.get(n).copied())
+                .collect();
+
+            (Some(reduced_palt), Some(squeeze_sb))
+        } else {
+            (None, None)
+        };
+
+        let opts = ProportionalOptions {
+            reduced_palt: reduced_palt_set,
+            squeeze_sb: squeeze_sb_set,
+            palt_override: Some(palt_data.clone()),
+            ..Default::default()
+        };
+
+        let mut builder = FontBuilder::new();
+        builder.copy_missing_tables(font.clone());
+        crate::proportional::make_proportional(&font, &mut builder, &opts)?;
+        current_bytes = builder.build();
+    }
+
+    // Pass B: tracking. Re-parse the post-proportional bytes and re-seed
+    // the builder so tracking's hmtx rewrite reads the proportional
+    // metrics, not the inst's untouched ones.
+    {
+        let font = FontRef::new(&current_bytes)
+            .map_err(|e| anyhow!("parse post-proportional font for tracking pass: {e}"))?;
+        let mut builder = FontBuilder::new();
+        builder.copy_missing_tables(font.clone());
+        crate::tracking::apply_tracking(&font, &mut builder, tracking, tracking_kana)?;
+        current_bytes = builder.build();
+    }
+
+    // Pass C: per-glyph sidebearing tweaks (apply_glyph_spacing). Empty
+    // spacing short-circuits inside the primitive; no harm in always
+    // calling.
+    {
+        let font = FontRef::new(&current_bytes)
+            .map_err(|e| anyhow!("parse post-tracking font for glyph_spacing pass: {e}"))?;
+        let mut builder = FontBuilder::new();
+        builder.copy_missing_tables(font.clone());
+        let adjusted =
+            crate::glyph_spacing::apply_glyph_spacing(&font, &mut builder, family.glyph_spacing)?;
+        if adjusted > 0 {
+            println!("          Per-glyph spacing: {adjusted} glyph(s) adjusted");
+        }
+        current_bytes = builder.build();
+    }
+
+    // Pass D: strip extreme-bbox glyphs (vertical-only iteration marks etc.).
+    {
+        let font = FontRef::new(&current_bytes)
+            .map_err(|e| anyhow!("parse post-spacing font for strip_extreme pass: {e}"))?;
+        let mut builder = FontBuilder::new();
+        builder.copy_missing_tables(font.clone());
+        crate::strip_extreme::strip_extreme_glyphs(&font, &mut builder)?;
+        current_bytes = builder.build();
+    }
+
+    // Pass E (optional): horizontal x-scale. Skipped when scale == 1.0
+    // (the current FAMILIES default).
+    if (family.x_scale - 1.0).abs() > f32::EPSILON {
+        let font = FontRef::new(&current_bytes)
+            .map_err(|e| anyhow!("parse post-strip font for x_scale pass: {e}"))?;
+        let mut builder = FontBuilder::new();
+        builder.copy_missing_tables(font.clone());
+        crate::x_scale::apply_x_scale(&font, &mut builder, family.x_scale)?;
+        current_bytes = builder.build();
+    }
+
+    std::fs::write(&prop_path, &current_bytes)
+        .with_context(|| format!("write prop font: {}", prop_path.display()))?;
+
     {
         let family_name = family.family_name;
         let file_name = format!("{}-{}", family.folder_prefix, weight.weight_name);
@@ -207,7 +363,10 @@ pub fn build_one(
                 scale: 1.0,
                 baseline_offset: 0,
                 axes: vec![],
-                exclude_codepoints: SUB_EXCLUDE_CODEPOINTS.iter().map(|s| s.to_string()).collect(),
+                exclude_codepoints: SUB_EXCLUDE_CODEPOINTS
+                    .iter()
+                    .map(std::string::ToString::to_string)
+                    .collect(),
             },
             &FontInput {
                 path: prop_path,
@@ -230,7 +389,9 @@ pub fn build_one(
                 font_path: out_path.clone(),
             },
         )?;
-        Ok(BuildResult { font_path: out_path })
+        Ok(BuildResult {
+            font_path: out_path,
+        })
     }
 }
 
@@ -249,9 +410,7 @@ mod tests {
         );
         assert_eq!(
             paths.noto_variable,
-            PathBuf::from(
-                "/x/source/vendor/fonts/Noto_Sans_JP/NotoSansJP-VariableFont_wght.ttf"
-            )
+            PathBuf::from("/x/source/vendor/fonts/Noto_Sans_JP/NotoSansJP-VariableFont_wght.ttf")
         );
         assert_eq!(paths.dist, PathBuf::from("/x/source/dist"));
         assert_eq!(paths.dist_ttf, PathBuf::from("/x/source/dist/ttf"));
