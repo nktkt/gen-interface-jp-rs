@@ -1,0 +1,19 @@
+# Rust
+/target/
+**/*.rs.bk
+*.pdb
+
+# Build output
+/dist/
+
+# Node
+node_modules/
+/.npm-cache/
+
+# Python (carried over from source project)
+__pycache__/
+*.pyc
+
+# OS
+.DS_Store
+.claude/
