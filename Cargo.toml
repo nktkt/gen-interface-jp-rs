@@ -14,10 +14,10 @@ authors = ["Yamato Iizuka"]
 repository = "https://github.com/yamatoiizuka/gen-interface-jp"
 
 [workspace.dependencies]
-skrifa = "0.36"
-read-fonts = "0.34"
-write-fonts = "0.42"
-font-types = "0.10"
+skrifa = "0.42"
+read-fonts = "0.39"
+write-fonts = "0.48"
+font-types = "0.11"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 anyhow = "1"
